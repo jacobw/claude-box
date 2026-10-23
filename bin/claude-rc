@@ -1,0 +1,35 @@
+#!/bin/bash
+# One Remote Control server: claude-rc <directory under ~/projects> <spawn mode>
+#
+# Session names default to the pod's hostname as a prefix; set
+# CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX in the pod to choose another.
+#
+# Runs in the foreground and exits when the server does, so Kubernetes
+# restarts it (a server gives up after ~10 minutes without network).
+#
+# First boot is done by hand (log in, clone, trust each folder, accept the
+# Remote Control confirmation), and a server started half-way would stop at
+# a prompt. So it waits for the directory, the login and ~/.claude-rc-ready,
+# which is created last. It says what it is waiting for every 30 s, and after
+# an hour exits non-zero so the restart shows in the pod's status.
+set -uo pipefail
+name=$1 mode=$2
+dir=$HOME/projects/$name
+
+for i in $(seq 1 120); do
+  missing=()
+  [ -f "$HOME/.claude-rc-ready" ] || missing+=("$HOME/.claude-rc-ready")
+  [ -d "$dir" ] || missing+=("directory $dir")
+  claude auth status 2>/dev/null | jq -e .loggedIn >/dev/null || missing+=("claude login")
+  [ ${#missing[@]} -eq 0 ] && break
+  echo "claude-rc[$name]: waiting for ${missing[*]} ($i/120)"
+  [ "$i" -eq 120 ] && { echo "claude-rc[$name]: gave up after an hour"; exit 1; }
+  sleep 30
+done
+
+cd "$dir" || exit 1
+echo "claude-rc[$name]: starting $(claude --version) in $dir, spawn mode $mode"
+claude remote-control --spawn "$mode" --permission-mode auto
+rc=$?
+echo "claude-rc[$name]: server exited with status $rc"
+exit "$rc"

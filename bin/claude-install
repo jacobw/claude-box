@@ -1,0 +1,12 @@
+#!/bin/bash
+# Init container: install Claude Code into the home if it isn't runnable.
+# ~/.local/share/claude (the versions) is an emptyDir in the pod, so after a
+# restart the launcher in ~/.local/bin dangles and this reinstalls the latest.
+# Between restarts Claude Code's own auto-updater keeps it current.
+set -euo pipefail
+if "$HOME/.local/bin/claude" --version 2>/dev/null; then
+  exit 0
+fi
+echo "claude-install: installing Claude Code into $HOME/.local"
+curl -fsSL https://claude.ai/install.sh | bash
+"$HOME/.local/bin/claude" --version
