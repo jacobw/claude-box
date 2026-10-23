@@ -1,9 +1,25 @@
 #!/bin/bash
 # Init container: install Claude Code into the home if it isn't runnable.
-# ~/.local/share/claude (the versions) is an emptyDir in the pod, so after a
-# restart the launcher in ~/.local/bin dangles and this reinstalls the latest.
-# Between restarts Claude Code's own auto-updater keeps it current.
+#
+# If CLAUDE_VERSIONS_DIR is set (an emptyDir mounted outside the home, at the
+# same path in every container), ~/.local/share/claude is made a symlink to
+# it, so the ~200 MB binaries stay off the home volume and out of its
+# backups. After a restart that directory is empty, the launcher in
+# ~/.local/bin dangles, and this reinstalls the latest. Between restarts
+# Claude Code's own auto-updater keeps it current; both follow the symlink.
+# The emptyDir isn't mounted inside the home because the runtime would
+# create its missing parents (~/.local, ~/.local/share) as root.
 set -euo pipefail
+if [ -n "${CLAUDE_VERSIONS_DIR:-}" ]; then
+  link=$HOME/.local/share/claude
+  mkdir -p "$HOME/.local/share"
+  # rmdir, not rm -r: a real directory here with something in it is left
+  # alone and stops the install.
+  if [ -d "$link" ] && [ ! -L "$link" ]; then
+    rmdir "$link"
+  fi
+  ln -sfn "$CLAUDE_VERSIONS_DIR" "$link"
+fi
 if "$HOME/.local/bin/claude" --version 2>/dev/null; then
   exit 0
 fi
