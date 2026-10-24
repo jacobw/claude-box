@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-  # Build (without publishing) on PRs too, so a Renovate bump whose download
-  # URL or archive layout changed fails here instead of on the cluster.
   pull_request:
   workflow_dispatch:
 
@@ -36,8 +34,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Tags are r<run number>, so they sort and a consumer's Renovate can
-      # follow them with versioning "regex:^r(?<major>\\d+)$".
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
