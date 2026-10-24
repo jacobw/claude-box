@@ -1,55 +1,114 @@
 FROM debian:trixie-slim
 
 # A base toolset for running Claude Code Remote Control servers in a
-# Kubernetes pod. Claude Code itself is not in the image: claude-install puts
-# it in the home volume, where its own auto-updater keeps it current. Python
-# venvs and other per-project tooling belong in the home volume too.
+# Kubernetes pod. Python venvs and other per-project tooling belong in the
+# home volume.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       bash ca-certificates curl dnsutils git gnupg iputils-ping jq less \
+       age bash ca-certificates curl dnsutils git gnupg iputils-ping jq less \
        netcat-openbsd openssh-client procps python3 python3-venv ripgrep \
        rsync tmux tzdata unzip vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
+# Claude Code, kubectl, gh and helm come from their makers' apt repos, so apt
+# checks their signatures. Each signing key is fetched at build time and the
+# build fails unless every key in the file has a fingerprint listed here, so
+# a key whose expiry is extended keeps working and a replaced key stops the
+# build. Claude Code's fingerprint is from its setup docs; the others were
+# read from the keys as served on 2026-10-25.
+#
+# Claude Code's apt install doesn't update itself: a new version is a new
+# image. The stable channel runs about a week behind and skips releases with
+# major regressions.
+# renovate: datasource=deb depName=claude-code registryUrl=https://downloads.claude.ai/claude-code/apt/stable?suite=stable&components=main&binaryArch=amd64
+ARG CLAUDE_CODE_VERSION=2.1.308-1
 # kubectl should stay within one minor of the cluster it talks to, so
-# Renovate only proposes its patches (renovate.json).
+# Renovate only proposes its patches (renovate.json). Its repo is one per
+# minor, taken from this version. That repo's layout is one Renovate's deb
+# datasource can't read, so the version is followed on GitHub instead.
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 ARG KUBECTL_VERSION=v1.36.5
+# renovate: datasource=deb depName=gh registryUrl=https://cli.github.com/packages?suite=stable&components=main&binaryArch=amd64
+ARG GH_VERSION=2.103.2
+# renovate: datasource=deb depName=helm registryUrl=https://packages.buildkite.com/helm-linux/helm-debian/any?suite=any&components=main&binaryArch=amd64
+ARG HELM_VERSION=4.3.0-1
+
+RUN set -eux; \
+    # add_repo <name> <key file: .asc armored, .gpg binary> <key URL>
+    #          <allowed fingerprints> <deb source>
+    add_repo() { \
+      name=$1 key=/etc/apt/keyrings/$2 key_url=$3 fingerprints=$4 source=$5; \
+      curl -fsSLo "$key" "$key_url"; \
+      found=$(gpg --show-keys --with-colons "$key" \
+        | awk -F: '$1 == "pub" {p = 1; next} $1 == "fpr" && p {print $10; p = 0}'); \
+      [ -n "$found" ]; \
+      for f in $found; do \
+        case " $fingerprints " in *" $f "*) ;; *) echo "unexpected key $f in $key"; exit 1 ;; esac; \
+      done; \
+      echo "deb [signed-by=$key] $source" > "/etc/apt/sources.list.d/$name.list"; \
+    }; \
+    install -d -m 0755 /etc/apt/keyrings; \
+    add_repo claude-code claude-code.asc https://downloads.claude.ai/keys/claude-code.asc \
+      31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE \
+      "https://downloads.claude.ai/claude-code/apt/stable stable main"; \
+    kube_minor=${KUBECTL_VERSION%.*}; \
+    add_repo kubernetes kubernetes.asc "https://pkgs.k8s.io/core:/stable:/${kube_minor}/deb/Release.key" \
+      DE15B14486CD377B9E876E1A234654DA9A296436 \
+      "https://pkgs.k8s.io/core:/stable:/${kube_minor}/deb/ /"; \
+    add_repo github-cli github-cli.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      "2C6106201985B60E6C7AC87323F3D4EA75716059 7F38BBB59D064DBCB3D84D725612B36462313325" \
+      "https://cli.github.com/packages stable main"; \
+    add_repo helm helm.asc https://packages.buildkite.com/helm-linux/helm-debian/gpgkey \
+      DDF78C3E6EBB2D2CC223C95C62BA89D07698DBC6 \
+      "https://packages.buildkite.com/helm-linux/helm-debian/any/ any main"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      "claude-code=${CLAUDE_CODE_VERSION}" "kubectl=${KUBECTL_VERSION#v}-*" \
+      "gh=${GH_VERSION}" "helm=${HELM_VERSION}"; \
+    rm -rf /var/lib/apt/lists/*; \
+    claude --version; kubectl version --client; gh --version; helm version
+
+# The rest have no apt repo. Each download is checked against the checksums
+# file published with its release (yq's has one column per hash, in the order
+# checksums_hashes_order gives). That catches a corrupt or swapped download,
+# not a compromised release.
 # renovate: datasource=github-releases depName=fluxcd/flux2
 ARG FLUX_VERSION=v2.9.6
-# renovate: datasource=github-releases depName=helm/helm
-ARG HELM_VERSION=v4.3.1
 # renovate: datasource=github-releases depName=getsops/sops
 ARG SOPS_VERSION=v3.13.3
-# renovate: datasource=github-releases depName=FiloSottile/age
-ARG AGE_VERSION=v1.3.2
 # renovate: datasource=github-releases depName=mikefarah/yq
 ARG YQ_VERSION=v4.54.1
-# renovate: datasource=github-releases depName=cli/cli
-ARG GH_VERSION=v2.103.2
 
 RUN set -eux; cd /tmp; \
-    curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
-    curl -fsSL "https://github.com/fluxcd/flux2/releases/download/${FLUX_VERSION}/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz" \
-      | tar -xz -C /usr/local/bin flux; \
-    curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
-      | tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm; \
-    curl -fsSLo /usr/local/bin/sops "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64"; \
-    curl -fsSL "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-amd64.tar.gz" \
-      | tar -xz --strip-components=1 -C /usr/local/bin age/age age/age-keygen; \
-    curl -fsSLo /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"; \
-    curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
-      | tar -xz --strip-components=2 -C /usr/local/bin "gh_${GH_VERSION#v}_linux_amd64/bin/gh"; \
-    chmod 0755 /usr/local/bin/*; \
-    kubectl version --client; flux version --client; helm version; sops --version; age --version; yq --version; gh --version
+    gh_dl() { curl -fsSLO "https://github.com/$1/releases/download/$2/$3"; }; \
+    flux=flux_${FLUX_VERSION#v}_linux_amd64.tar.gz; \
+    gh_dl fluxcd/flux2 "$FLUX_VERSION" "$flux"; \
+    gh_dl fluxcd/flux2 "$FLUX_VERSION" "flux_${FLUX_VERSION#v}_checksums.txt"; \
+    grep " $flux\$" "flux_${FLUX_VERSION#v}_checksums.txt" | sha256sum -c -; \
+    tar -xzf "$flux" -C /usr/local/bin flux; \
+    sops=sops-${SOPS_VERSION}.linux.amd64; \
+    gh_dl getsops/sops "$SOPS_VERSION" "$sops"; \
+    gh_dl getsops/sops "$SOPS_VERSION" "sops-${SOPS_VERSION}.checksums.txt"; \
+    grep " $sops\$" "sops-${SOPS_VERSION}.checksums.txt" | sha256sum -c -; \
+    install -m 0755 "$sops" /usr/local/bin/sops; \
+    gh_dl mikefarah/yq "$YQ_VERSION" yq_linux_amd64; \
+    gh_dl mikefarah/yq "$YQ_VERSION" checksums; \
+    gh_dl mikefarah/yq "$YQ_VERSION" checksums_hashes_order; \
+    col=$(($(grep -nx SHA-256 checksums_hashes_order | cut -d: -f1) + 1)); \
+    echo "$(awk -v c="$col" '$1 == "yq_linux_amd64" {print $c}' checksums)  yq_linux_amd64" | sha256sum -c -; \
+    install -m 0755 yq_linux_amd64 /usr/local/bin/yq; \
+    rm -f /tmp/*; \
+    flux version --client; sops --version; yq --version
 
 COPY bin/ /usr/local/bin/
 
 # uid 1000 for the pod's securityContext; mount the home volume at
-# /home/claude. Set TZ in the pod if you want local time.
+# /home/claude. Set TZ in the pod if you want local time. ~/.local/bin is
+# deliberately not on PATH: a Claude Code installed there by its own
+# installer would win over the packaged one.
 RUN useradd -m -u 1000 -s /bin/bash claude
 USER claude
 WORKDIR /home/claude
 ENV HOME=/home/claude \
-    PATH=/home/claude/.local/bin:/usr/local/bin:/usr/bin:/bin \
+    PATH=/usr/local/bin:/usr/bin:/bin \
     LANG=C.UTF-8
