@@ -1,8 +1,5 @@
 FROM debian:trixie-slim
 
-# A base toolset for running Claude Code Remote Control servers in a
-# Kubernetes pod. Python venvs and other per-project tooling belong in the
-# home volume.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        age bash ca-certificates curl dnsutils git gnupg iputils-ping jq less \
@@ -10,22 +7,8 @@ RUN apt-get update \
        rsync tmux tzdata unzip vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
-# Claude Code, kubectl, gh and helm come from their makers' apt repos, so apt
-# checks their signatures. Each signing key is fetched at build time and the
-# build fails unless every key in the file has a fingerprint listed here, so
-# a key whose expiry is extended keeps working and a replaced key stops the
-# build. Claude Code's fingerprint is from its setup docs; the others were
-# read from the keys as served on 2026-10-25.
-#
-# Claude Code's apt install doesn't update itself: a new version is a new
-# image. The stable channel runs about a week behind and skips releases with
-# major regressions.
 # renovate: datasource=deb depName=claude-code registryUrl=https://downloads.claude.ai/claude-code/apt/stable?suite=stable&components=main&binaryArch=amd64
 ARG CLAUDE_CODE_VERSION=2.1.308-1
-# kubectl should stay within one minor of the cluster it talks to, so
-# Renovate only proposes its patches (renovate.json). Its repo is one per
-# minor, taken from this version. That repo's layout is one Renovate's deb
-# datasource can't read, so the version is followed on GitHub instead.
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 ARG KUBECTL_VERSION=v1.36.5
 # renovate: datasource=deb depName=gh registryUrl=https://cli.github.com/packages?suite=stable&components=main&binaryArch=amd64
@@ -34,8 +17,6 @@ ARG GH_VERSION=2.103.2
 ARG HELM_VERSION=4.3.0-1
 
 RUN set -eux; \
-    # add_repo <name> <key file: .asc armored, .gpg binary> <key URL>
-    #          <allowed fingerprints> <deb source>
     add_repo() { \
       name=$1 key=/etc/apt/keyrings/$2 key_url=$3 fingerprints=$4 source=$5; \
       curl -fsSLo "$key" "$key_url"; \
@@ -68,10 +49,6 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     claude --version; kubectl version --client; gh --version; helm version
 
-# The rest have no apt repo. Each download is checked against the checksums
-# file published with its release (yq's has one column per hash, in the order
-# checksums_hashes_order gives). That catches a corrupt or swapped download,
-# not a compromised release.
 # renovate: datasource=github-releases depName=fluxcd/flux2
 ARG FLUX_VERSION=v2.9.6
 # renovate: datasource=github-releases depName=getsops/sops
@@ -102,13 +79,10 @@ RUN set -eux; cd /tmp; \
 
 COPY bin/ /usr/local/bin/
 
-# uid 1000 for the pod's securityContext; mount the home volume at
-# /home/claude. Set TZ in the pod if you want local time. ~/.local/bin is
-# deliberately not on PATH: a Claude Code installed there by its own
-# installer would win over the packaged one.
 RUN useradd -m -u 1000 -s /bin/bash claude
 USER claude
 WORKDIR /home/claude
+# ~/.local/bin off PATH deliberately.
 ENV HOME=/home/claude \
     PATH=/usr/local/bin:/usr/bin:/bin \
     LANG=C.UTF-8

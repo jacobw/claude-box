@@ -1,34 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
-  ],
+  "extends": ["config:recommended"],
   "customManagers": [
     {
-      "description": "The tool versions pinned by ARG lines in the Dockerfile. Those from apt repos also name the repo, as the deb datasource needs.",
       "customType": "regex",
       "managerFilePatterns": ["/^Dockerfile$/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)( registryUrl=(?<registryUrl>\\S+))?\\nARG \\S+_VERSION=(?<currentValue>\\S+)"
-      ]
+      "matchStrings": ["# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)( registryUrl=(?<registryUrl>\\S+))?\\nARG \\S+_VERSION=(?<currentValue>\\S+)"]
     }
   ],
   "packageRules": [
     {
-      "description": [
-        "kubectl stays within one minor of the cluster it talks to, so only",
-        "its patches are proposed. Move to the next minor by hand when the",
-        "cluster moves."
-      ],
       "matchPackageNames": ["kubernetes/kubernetes"],
       "matchUpdateTypes": ["major", "minor"],
       "enabled": false
     },
     {
-      "description": [
-        "A Claude Code release is a new image, and rolling one out restarts the",
-        "pod running it, so bumps come at most once a week (Mondays, UTC)."
-      ],
       "matchDatasources": ["deb"],
       "matchPackageNames": ["claude-code"],
       "schedule": ["* * * * 1"]
