@@ -10,7 +10,7 @@
   ],
   "packageRules": [
     {
-      "matchPackageNames": ["kubernetes/kubernetes"],
+      "matchPackageNames": ["kubernetes/kubernetes", "siderolabs/talos"],
       "matchUpdateTypes": ["major", "minor"],
       "enabled": false
     },

@@ -55,6 +55,8 @@ ARG FLUX_VERSION=v2.9.6
 ARG SOPS_VERSION=v3.13.3
 # renovate: datasource=github-releases depName=mikefarah/yq
 ARG YQ_VERSION=v4.54.1
+# renovate: datasource=github-releases depName=siderolabs/talos
+ARG TALOSCTL_VERSION=v1.14.0
 
 RUN set -eux; cd /tmp; \
     gh_dl() { curl -fsSLO "https://github.com/$1/releases/download/$2/$3"; }; \
@@ -74,8 +76,12 @@ RUN set -eux; cd /tmp; \
     col=$(($(grep -nx SHA-256 checksums_hashes_order | cut -d: -f1) + 1)); \
     echo "$(awk -v c="$col" '$1 == "yq_linux_amd64" {print $c}' checksums)  yq_linux_amd64" | sha256sum -c -; \
     install -m 0755 yq_linux_amd64 /usr/local/bin/yq; \
+    gh_dl siderolabs/talos "$TALOSCTL_VERSION" talosctl-linux-amd64; \
+    gh_dl siderolabs/talos "$TALOSCTL_VERSION" sha256sum.txt; \
+    grep " talosctl-linux-amd64\$" sha256sum.txt | sha256sum -c -; \
+    install -m 0755 talosctl-linux-amd64 /usr/local/bin/talosctl; \
     rm -f /tmp/*; \
-    flux version --client; sops --version; yq --version
+    flux version --client; sops --version; yq --version; talosctl version --client
 
 COPY bin/ /usr/local/bin/
 
