@@ -56,7 +56,7 @@ ARG SOPS_VERSION=v3.13.3
 # renovate: datasource=github-releases depName=mikefarah/yq
 ARG YQ_VERSION=v4.54.1
 # renovate: datasource=github-releases depName=siderolabs/talos
-ARG TALOSCTL_VERSION=v1.14.4
+ARG TALOSCTL_VERSION=v1.14.5
 
 RUN set -eux; cd /tmp; \
     gh_dl() { curl -fsSLO "https://github.com/$1/releases/download/$2/$3"; }; \
