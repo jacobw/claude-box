@@ -12,7 +12,7 @@ ARG CLAUDE_CODE_VERSION=2.1.308-1
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 ARG KUBECTL_VERSION=v1.36.5
 # renovate: datasource=deb depName=gh registryUrl=https://cli.github.com/packages?suite=stable&components=main&binaryArch=amd64
-ARG GH_VERSION=2.103.2
+ARG GH_VERSION=2.103.3
 # renovate: datasource=deb depName=helm registryUrl=https://packages.buildkite.com/helm-linux/helm-debian/any?suite=any&components=main&binaryArch=amd64
 ARG HELM_VERSION=4.3.0-1
 
