@@ -10,6 +10,16 @@
   ],
   "packageRules": [
     {
+      "description": [
+        "Auto-merge minor and patch updates once the image build passes.",
+        "platformAutomerge is off because repo-level 'Allow auto-merge' is",
+        "disabled on GitHub, so Renovate merges the PR itself. Majors wait for a person."
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "platformAutomerge": false
+    },
+    {
       "matchPackageNames": ["kubernetes/kubernetes"],
       "matchUpdateTypes": ["major", "minor"],
       "enabled": false
