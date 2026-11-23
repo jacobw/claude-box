@@ -8,7 +8,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # renovate: datasource=deb depName=claude-code registryUrl=https://downloads.claude.ai/claude-code/apt/stable?suite=stable&components=main&binaryArch=amd64
-ARG CLAUDE_CODE_VERSION=2.1.323-1
+ARG CLAUDE_CODE_VERSION=2.1.325-1
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 ARG KUBECTL_VERSION=v1.36.5
 # renovate: datasource=deb depName=gh registryUrl=https://cli.github.com/packages?suite=stable&components=main&binaryArch=amd64
