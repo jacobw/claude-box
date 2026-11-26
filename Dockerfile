@@ -7,6 +7,16 @@ RUN apt-get update \
        rsync tmux tzdata unzip vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
+# Build tools, so packages with C or C++ extensions can be built from source:
+# gcc, g++, make and libc headers (build-essential), pkg-config, and the
+# Python headers.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential pkgconf python3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && gcc --version && make --version && pkg-config --version \
+    && test -f "$(python3 -c 'import sysconfig; print(sysconfig.get_path("include"))')/Python.h"
+
 # renovate: datasource=deb depName=claude-code registryUrl=https://downloads.claude.ai/claude-code/apt/stable?suite=stable&components=main&binaryArch=amd64
 ARG CLAUDE_CODE_VERSION=2.1.325-1
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
