@@ -20,6 +20,7 @@
       "platformAutomerge": false
     },
     {
+      "description": ["kubectl follows the cluster's minor: bump it by hand when the cluster moves."],
       "matchPackageNames": ["kubernetes/kubernetes"],
       "matchUpdateTypes": ["major", "minor"],
       "enabled": false
